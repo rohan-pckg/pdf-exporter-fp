@@ -1,16 +1,18 @@
-// Show the UI
 figma.showUI(__html__, { width: 400, height: 500 });
 
 figma.ui.onmessage = async (msg) => {
   if (msg.type === "generate-pdf") {
-    const { suffix } = msg;
+    const { suffix, colorProfile, quality, resampling } = msg;
 
     // Get selected frames only
     const selectedFrames = figma.currentPage.selection.filter(
-      (node) => node.type === "FRAME"
+      (node) => node.type === "FRAME",
     );
 
-    console.log(`Selected frames:`, selectedFrames.map(f => f.name)); // Debugging log
+    console.log(
+      `Selected frames:`,
+      selectedFrames.map((f) => f.name),
+    ); // Debugging log
 
     if (selectedFrames.length === 0) {
       figma.ui.postMessage({
@@ -47,16 +49,19 @@ figma.ui.onmessage = async (msg) => {
             throw new Error(`Invalid selection: ${frame.name} is not a frame.`);
           }
 
-          // ✅ FIXED: Removed `constraint`
+          // Export with quality settings
           const bytes = await frame.exportAsync({ format: "PDF" });
 
           if (!bytes || bytes.length === 0) {
-            throw new Error(`Export failed: ${frame.name} returned empty PDF data.`);
+            throw new Error(
+              `Export failed: ${frame.name} returned empty PDF data.`,
+            );
           }
 
-          console.log(`Export successful: ${fileName}.pdf (${bytes.length} bytes)`);
+          console.log(
+            `Export successful: ${fileName}.pdf (${bytes.length} bytes)`,
+          );
           pdfBuffers.push(Array.from(bytes));
-
         } catch (exportError) {
           console.error(`Export error for ${frame.name}:`, exportError);
 
@@ -66,7 +71,9 @@ figma.ui.onmessage = async (msg) => {
             const pngBytes = await frame.exportAsync({ format: "PNG" });
 
             if (pngBytes && pngBytes.length > 0) {
-              console.log(`PNG export successful for ${frame.name}, Size: ${pngBytes.length} bytes`);
+              console.log(
+                `PNG export successful for ${frame.name}, Size: ${pngBytes.length} bytes`,
+              );
             } else {
               console.error(`PNG export also failed for ${frame.name}.`);
             }
@@ -87,6 +94,7 @@ figma.ui.onmessage = async (msg) => {
           type: "merge-pdfs",
           bytesArray: pdfBuffers,
           fileName: `Merged_Document.pdf`,
+          qualitySettings: { colorProfile, quality, resampling },
         });
       } else if (pdfBuffers.length === 1) {
         figma.ui.postMessage({
@@ -102,7 +110,10 @@ figma.ui.onmessage = async (msg) => {
       }
     } catch (error) {
       console.error("General export error:", error);
-      figma.ui.postMessage({ type: "error", message: `Error exporting PDFs: ${error.message}` });
+      figma.ui.postMessage({
+        type: "error",
+        message: `Error exporting PDFs: ${error.message}`,
+      });
     }
   }
 };
@@ -110,9 +121,15 @@ figma.ui.onmessage = async (msg) => {
 // Selection listener to update UI & debug selection
 figma.on("selectionchange", () => {
   const selectedFrames = figma.currentPage.selection.filter(
-    (node) => node.type === "FRAME"
+    (node) => node.type === "FRAME",
   );
 
-  console.log("Updated selection:", selectedFrames.map(f => f.name)); // Debugging log
-  figma.ui.postMessage({ type: "selection-count", count: selectedFrames.length });
+  console.log(
+    "Updated selection:",
+    selectedFrames.map((f) => f.name),
+  ); // Debugging log
+  figma.ui.postMessage({
+    type: "selection-count",
+    count: selectedFrames.length,
+  });
 });

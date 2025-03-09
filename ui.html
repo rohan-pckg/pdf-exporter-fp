@@ -1,126 +1,358 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PDF Generator</title>
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>PDF Generator</title>
 
-  <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+        <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
-    body { background-color: #000; color: #fff; width: 100%; height: 100%; overflow: hidden; }
-    .container { display: flex; flex-direction: column; height: 100vh; padding: 20px; }
-    .header h1 { font-size: 24px; }
-    .form-group { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-    .input-field { background-color: #1b1b1b; border: none; border-radius: 8px; color: white; padding: 10px; width: 100%; }
-    .generate-btn { background-color: white; color: black; border: none; border-radius: 8px; padding: 12px; font-size: 16px; cursor: pointer; width: 100%; }
-    .generate-btn:disabled { background-color: #333; color: #666; cursor: not-allowed; }
-    .status { text-align: center; padding: 10px; display: none; }
-    .error { color: #f44336; }
-  </style>
-</head>
-
-<body>
-  <div class="container">
-    <div class="header"><h1>PDF Generator</h1></div>
-    <div class="content">
-      <div class="form-group">
-        <label for="suffix">Suffix</label>
-        <input type="text" id="suffix" class="input-field" placeholder="Enter suffix...">
-      </div>
-      <div id="status" class="status"></div>
-    </div>
-    <button id="generateBtn" class="generate-btn" disabled>Generate</button>
-  </div>
-
-  <script>
-    const generateBtn = document.getElementById("generateBtn");
-    const statusElement = document.getElementById("status");
-
-    async function mergePdfs(pdfBytesArray) {
-      try {
-        const pdfLib = await PDFLib.PDFDocument;
-        const mergedPdf = await pdfLib.create();
-
-        for (const pdfBytes of pdfBytesArray) {
-          if (!pdfBytes || pdfBytes.length === 0) {
-            console.error("❌ Skipping empty PDF data.");
-            continue;
-          }
-
-          const pdf = await pdfLib.load(new Uint8Array(pdfBytes));
-          const pages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
-          pages.forEach(page => mergedPdf.addPage(page));
-        }
-
-        return await mergedPdf.save();
-      } catch (error) {
-        console.error("❌ Merge error:", error);
-        showStatus(`Error merging PDFs: ${error.message}`, true);
-        return null;
-      }
-    }
-
-    function downloadFile(bytes, fileName) {
-      try {
-        const blob = new Blob([bytes], { type: "application/pdf" });
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(blob);
-        link.download = fileName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        showStatus(`Downloaded ${fileName}`);
-      } catch (error) {
-        showStatus(`Download error: ${error.message}`, true);
-      }
-    }
-
-    function showStatus(message, isError = false) {
-      statusElement.textContent = message;
-      statusElement.style.display = "block";
-      statusElement.classList.toggle("error", isError);
-      if (!isError) setTimeout(() => (statusElement.style.display = "none"), 3000);
-    }
-
-    window.onmessage = async (event) => {
-      const message = event.data.pluginMessage;
-      if (!message) return;
-
-      switch (message.type) {
-        case "selection-count":
-          generateBtn.disabled = message.count === 0;
-          break;
-        case "export-started":
-          showStatus(`Starting export of ${message.count} frame(s)...`);
-          break;
-        case "export-bytes":
-          downloadFile(message.bytes, message.fileName);
-          break;
-        case "merge-pdfs":
-          (async () => {
-            try {
-              console.log("🔄 Merging PDFs...");
-              const mergedBytes = await mergePdfs(message.bytesArray);
-              if (mergedBytes) {
-                const suffix = document.getElementById("suffix").value.trim();
-                const fileName = suffix ? `Merged_${suffix}.pdf` : "Merged_Document.pdf";
-                downloadFile(mergedBytes, fileName);
-                showStatus(`Merged PDF downloaded: ${fileName}`);
-              }
-            } catch (error) {
-              showStatus(`Error merging PDFs: ${error.message}`, true);
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+                font-family: "Inter", sans-serif;
             }
-          })();
-          break;
-      }
-    };
 
-    generateBtn.onclick = () => {
-      const suffix = document.getElementById("suffix").value.trim();
-      parent.postMessage({ pluginMessage: { type: "generate-pdf", suffix } }, "*");
-    };
-  </script>
-</body>
+            body {
+                background-color: #000;
+                color: #fff;
+                width: 100%;
+                overflow: hidden;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+            }
+
+            .container {
+                display: flex;
+                flex-direction: column;
+                background: #000;
+                padding: 0; /* Remove padding to match edge-to-edge design */
+            }
+
+            .header {
+                margin-bottom: 30px; /* Adjusted to match spacing in image */
+                padding-left: 24px;
+            }
+
+            .header h1 {
+                font-size: 32px;
+                font-weight: 700;
+                color: #ffffff;
+            }
+
+            .content {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                padding-left: 24px;
+                padding-right: 24px;
+                gap: 12px; /* Tighter gap to match image */
+            }
+
+            .form-group {
+                display: flex;
+                align-items: center;
+                gap: 12px; /* Tighter gap between label and input */
+            }
+
+            .form-group label {
+                font-size: 16px;
+                min-width: 110px; /* Adjusted to match label width in image */
+                color: #fff;
+            }
+
+            .input-field,
+            .select-field {
+                background-color: #111111;
+                border-radius: 16px; /* Smaller radius to match image */
+                color: #fff;
+                padding: 16px 12px; /* Adjusted padding to match height */
+                width: 100%;
+                font-size: 18px;
+                border: 0px;
+            }
+
+            .input-field {
+                placeholder: none; /* Remove placeholder visibility */
+            }
+
+            .select-field {
+                -webkit-appearance: none;
+                -moz-appearance: none;
+                appearance: none;
+                background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23fff' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+                background-repeat: no-repeat;
+                background-position: right 10px center;
+            }
+
+            .footer {
+                border-top: 1px solid #404040;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-top: 40px;
+                border-top: none; /* Remove border to match image */
+            }
+
+            .frame-count-container {
+                display: flex;
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .frame-count {
+                font-size: 24px;
+                padding-left: 24px;
+                font-weight: 700; /* Bolder to match image */
+                color: #fff;
+            }
+
+            .frame-label {
+                padding-left: 24px;
+                color: #999;
+                font-size: 14px; /* Smaller font to match image */
+            }
+
+            hr {
+                width: 100vw;
+                color: #404040;
+            }
+
+            .generate-btn {
+                background-color: #fff;
+                margin-right: 24px;
+                color: #000;
+                border: none;
+                border-radius: 16px;
+                padding: 15px 60px; /* Adjusted to match button height in image */
+                font-size: 20px;
+                font-weight: 700;
+                cursor: pointer;
+                transition: background-color 0.3s;
+            }
+
+            .generate-btn:hover {
+                background-color: #e0e0e0;
+            }
+
+            .generate-btn:disabled {
+                background-color: #333;
+                color: #666;
+                cursor: not-allowed;
+            }
+
+            .status {
+                text-align: center;
+                padding: 10px;
+                display: none;
+            }
+
+            .error {
+                color: #f44336;
+            }
+        </style>
+    </head>
+
+    <body>
+        <div class="container">
+            <!-- Header -->
+            <div class="header">
+                <h1>PDF generator</h1>
+            </div>
+
+            <!-- Content area with form fields -->
+            <div class="content">
+                <!-- Suffix field -->
+                <div class="form-group">
+                    <label for="suffix">Suffix</label>
+                    <input
+                        type="text"
+                        id="suffix"
+                        class="input-field"
+                        value=""
+                    />
+                </div>
+
+                <!-- Color Profile -->
+                <div class="form-group">
+                    <label for="colorProfile">Color profile</label>
+                    <select id="colorProfile" class="select-field">
+                        <option value="sRGB" selected>sRGB</option>
+                        <option value="AdobeRGB">Adobe RGB</option>
+                        <option value="ProPhoto">ProPhoto RGB</option>
+                        <option value="CMYK">CMYK</option>
+                    </select>
+                </div>
+
+                <!-- Quality -->
+                <div class="form-group">
+                    <label for="quality">Quality</label>
+                    <select id="quality" class="select-field">
+                        <option value="Low">Low</option>
+                        <option value="Medium" selected>Medium</option>
+                        <option value="High">High</option>
+                        <option value="Best">Best</option>
+                    </select>
+                </div>
+
+                <!-- Image Resampling -->
+                <div class="form-group">
+                    <label for="resampling">Image resampling</label>
+                    <select id="resampling" class="select-field">
+                        <option value="None">None</option>
+                        <option value="Detailed" selected>Detailed</option>
+                    </select>
+                </div>
+
+                <!-- Status message (success/error) -->
+                <div id="status" class="status"></div>
+            </div>
+
+            <!-- Footer area with frame count and generate button -->
+            <div class="footer">
+                <div id="frameCount" class="frame-count-container">
+                    <span class="frame-count">0</span>
+                    <span class="frame-label">Frames selected</span>
+                </div>
+                <button id="generateBtn" class="generate-btn">Generate</button>
+            </div>
+        </div>
+
+        <script>
+            // DOM elements
+            const generateBtn = document.getElementById("generateBtn");
+            const statusElement = document.getElementById("status");
+            const frameCountElement = document.querySelector(".frame-count");
+
+            // Merge PDFs if needed
+            async function mergePdfs(pdfBytesArray) {
+                try {
+                    const pdfLib = await PDFLib.PDFDocument;
+                    const mergedPdf = await pdfLib.create();
+
+                    for (const pdfBytes of pdfBytesArray) {
+                        if (!pdfBytes || pdfBytes.length === 0) {
+                            console.error("❌ Skipping empty PDF data.");
+                            continue;
+                        }
+                        const pdf = await pdfLib.load(new Uint8Array(pdfBytes));
+                        const pages = await mergedPdf.copyPages(
+                            pdf,
+                            pdf.getPageIndices(),
+                        );
+                        pages.forEach((page) => mergedPdf.addPage(page));
+                    }
+                    return await mergedPdf.save();
+                } catch (error) {
+                    console.error("❌ Merge error:", error);
+                    showStatus(`Error merging PDFs: ${error.message}`, true);
+                    return null;
+                }
+            }
+
+            // Download file
+            function downloadFile(bytes, fileName) {
+                try {
+                    const blob = new Blob([bytes], { type: "application/pdf" });
+                    const link = document.createElement("a");
+                    link.href = URL.createObjectURL(blob);
+                    link.download = fileName;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    showStatus(`Downloaded ${fileName}`);
+                } catch (error) {
+                    showStatus(`Download error: ${error.message}`, true);
+                }
+            }
+
+            // Show status (success or error)
+            function showStatus(message, isError = false) {
+                statusElement.textContent = message;
+                statusElement.style.display = "block";
+                statusElement.classList.toggle("error", isError);
+                if (!isError) {
+                    setTimeout(() => {
+                        statusElement.style.display = "none";
+                    }, 3000);
+                }
+            }
+
+            // Handle messages from the plugin code
+            window.onmessage = async (event) => {
+                const message = event.data.pluginMessage;
+                if (!message) return;
+
+                switch (message.type) {
+                    case "selection-count":
+                        frameCountElement.textContent = message.count;
+                        generateBtn.disabled = message.count === 0;
+                        break;
+
+                    case "export-started":
+                        showStatus(
+                            `Starting export of ${message.count} frame(s)...`,
+                        );
+                        break;
+
+                    case "export-bytes":
+                        downloadFile(message.bytes, message.fileName);
+                        break;
+
+                    case "merge-pdfs":
+                        (async () => {
+                            try {
+                                console.log("🔄 Merging PDFs...");
+                                const mergedBytes = await mergePdfs(
+                                    message.bytesArray,
+                                );
+                                if (mergedBytes) {
+                                    const suffix = document
+                                        .getElementById("suffix")
+                                        .value.trim();
+                                    const mergedName = suffix
+                                        ? `Merged_${suffix}.pdf`
+                                        : "Merged_Document.pdf";
+                                    downloadFile(mergedBytes, mergedName);
+                                    showStatus(
+                                        `Merged PDF downloaded: ${mergedName}`,
+                                    );
+                                }
+                            } catch (error) {
+                                showStatus(
+                                    `Error merging PDFs: ${error.message}`,
+                                    true,
+                                );
+                            }
+                        })();
+                        break;
+                }
+            };
+
+            // On Generate button click, pass the user inputs to the plugin code
+            generateBtn.onclick = () => {
+                const suffix = document.getElementById("suffix").value.trim();
+                const colorProfile =
+                    document.getElementById("colorProfile").value;
+                const quality = document.getElementById("quality").value;
+                const resampling = document.getElementById("resampling").value;
+
+                parent.postMessage(
+                    {
+                        pluginMessage: {
+                            type: "generate-pdf",
+                            suffix,
+                            colorProfile,
+                            quality,
+                            resampling,
+                        },
+                    },
+                    "*",
+                );
+            };
+        </script>
+    </body>
 </html>
