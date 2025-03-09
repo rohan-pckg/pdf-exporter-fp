@@ -153,6 +153,22 @@
             .error {
                 color: #f44336;
             }
+
+            .selection-order-info {
+                margin-top: 10px;
+                display: none;
+                background-color: #111111;
+                padding: 10px;
+                border-radius: 16px;
+                max-height: 100px;
+                overflow-y: auto;
+            }
+
+            .selection-order-info p {
+                margin: 2px 0;
+                font-size: 12px;
+                color: #aaa;
+            }
         </style>
     </head>
 
@@ -174,6 +190,18 @@
                         class="input-field"
                         value=""
                     />
+                </div>
+
+                <!-- Sort Order - New option -->
+                <div class="form-group">
+                    <label for="sortOrder">Sort order</label>
+                    <select id="sortOrder" class="select-field">
+                        <option value="selection" selected>
+                            By selection order
+                        </option>
+                        <option value="position">By position</option>
+                        <option value="name">By name</option>
+                    </select>
                 </div>
 
                 <!-- Color Profile -->
@@ -207,6 +235,9 @@
                     </select>
                 </div>
 
+                <!-- Selection order info (optional) -->
+                <div id="selectionOrderInfo" class="selection-order-info"></div>
+
                 <!-- Status message (success/error) -->
                 <div id="status" class="status"></div>
             </div>
@@ -226,6 +257,45 @@
             const generateBtn = document.getElementById("generateBtn");
             const statusElement = document.getElementById("status");
             const frameCountElement = document.querySelector(".frame-count");
+            const selectionOrderInfo =
+                document.getElementById("selectionOrderInfo");
+            const sortOrderSelect = document.getElementById("sortOrder");
+
+            // Selection order information
+            let currentSelectionOrder = [];
+
+            // Toggle selection order info display when "By selection order" is chosen
+            sortOrderSelect.addEventListener("change", function () {
+                if (this.value === "selection") {
+                    showSelectionOrderInfo();
+                } else {
+                    selectionOrderInfo.style.display = "none";
+                }
+            });
+
+            // Show selection order information
+            // function showSelectionOrderInfo() {
+            //     if (
+            //         currentSelectionOrder.length > 0 &&
+            //         sortOrderSelect.value === "selection"
+            //     ) {
+            //         selectionOrderInfo.innerHTML =
+            //             "<p><strong>Export order:</strong></p>";
+
+            //         // Sort by order first
+            //         const sortedSelection = [...currentSelectionOrder].sort(
+            //             (a, b) => a.order - b.order,
+            //         );
+
+            //         sortedSelection.forEach((item, index) => {
+            //             selectionOrderInfo.innerHTML += `<p>${index + 1}. ${item.name}</p>`;
+            //         });
+
+            //         selectionOrderInfo.style.display = "block";
+            //     } else {
+            //         selectionOrderInfo.style.display = "none";
+            //     }
+            // }
 
             // Merge PDFs if needed
             async function mergePdfs(pdfBytesArray) {
@@ -253,10 +323,31 @@
                 }
             }
 
-            // Download file
+            // Download file - revised to handle different array formats
             function downloadFile(bytes, fileName) {
                 try {
-                    const blob = new Blob([bytes], { type: "application/pdf" });
+                    console.log(
+                        "📥 Downloading file:",
+                        fileName,
+                        "Data type:",
+                        typeof bytes,
+                    );
+
+                    // Convert to Uint8Array if it's an Array
+                    let uint8Array;
+                    if (Array.isArray(bytes)) {
+                        uint8Array = new Uint8Array(bytes);
+                    } else if (bytes instanceof Uint8Array) {
+                        uint8Array = bytes;
+                    } else {
+                        throw new Error("Unsupported data format");
+                    }
+
+                    console.log("📊 Data length:", uint8Array.length);
+
+                    const blob = new Blob([uint8Array], {
+                        type: "application/pdf",
+                    });
                     const link = document.createElement("a");
                     link.href = URL.createObjectURL(blob);
                     link.download = fileName;
@@ -265,7 +356,22 @@
                     document.body.removeChild(link);
                     showStatus(`Downloaded ${fileName}`);
                 } catch (error) {
+                    console.error("❌ Download error:", error);
                     showStatus(`Download error: ${error.message}`, true);
+                }
+            }
+
+            // Process single PDF
+            async function processSinglePdf(pdfBytes) {
+                try {
+                    // Load the PDF using pdf-lib to verify it and save it properly
+                    const pdfLib = await PDFLib.PDFDocument;
+                    const pdf = await pdfLib.load(new Uint8Array(pdfBytes));
+                    return await pdf.save();
+                } catch (error) {
+                    console.error("❌ PDF processing error:", error);
+                    showStatus(`Error processing PDF: ${error.message}`, true);
+                    return null;
                 }
             }
 
@@ -290,6 +396,12 @@
                     case "selection-count":
                         frameCountElement.textContent = message.count;
                         generateBtn.disabled = message.count === 0;
+
+                        // Update selection order information if available
+                        if (message.selectionOrder) {
+                            currentSelectionOrder = message.selectionOrder;
+                            showSelectionOrderInfo();
+                        }
                         break;
 
                     case "export-started":
@@ -298,17 +410,81 @@
                         );
                         break;
 
-                    case "export-bytes":
-                        downloadFile(message.bytes, message.fileName);
+                    case "export-single-pdf":
+                        console.log(
+                            "📄 Processing single PDF:",
+                            message.fileName,
+                        );
+                        (async () => {
+                            try {
+                                // Process and save the single PDF
+                                const processedBytes = await processSinglePdf(
+                                    message.bytes,
+                                );
+                                if (processedBytes) {
+                                    downloadFile(
+                                        processedBytes,
+                                        message.fileName,
+                                    );
+                                }
+                            } catch (error) {
+                                showStatus(
+                                    `Error processing PDF: ${error.message}`,
+                                    true,
+                                );
+                            }
+                        })();
                         break;
 
                     case "merge-pdfs":
                         (async () => {
                             try {
-                                console.log("🔄 Merging PDFs...");
-                                const mergedBytes = await mergePdfs(
-                                    message.bytesArray,
+                                console.log(
+                                    "🔄 Merging PDFs in specified order...",
                                 );
+                                // Extract bytes arrays from PDF data
+                                const sortedPdfData = [...message.pdfData];
+
+                                if (sortOrderSelect.value === "selection") {
+                                    console.log(
+                                        "📋 Using selection order for merging",
+                                    );
+                                    // The data is already sorted by selection order from the plugin
+                                } else if (sortOrderSelect.value === "name") {
+                                    console.log(
+                                        "📋 Sorting by name for merging",
+                                    );
+                                    sortedPdfData.sort((a, b) =>
+                                        a.name.localeCompare(b.name),
+                                    );
+                                } else if (
+                                    sortOrderSelect.value === "position"
+                                ) {
+                                    console.log(
+                                        "📋 Sorting by position for merging",
+                                    );
+                                    sortedPdfData.sort((a, b) => {
+                                        if (
+                                            Math.abs(
+                                                a.position.y - b.position.y,
+                                            ) > 50
+                                        ) {
+                                            return a.position.y - b.position.y;
+                                        }
+                                        return a.position.x - b.position.x;
+                                    });
+                                }
+
+                                console.log(
+                                    "🔄 Final merge order:",
+                                    sortedPdfData.map((pdf) => pdf.name),
+                                );
+
+                                const bytesArray = sortedPdfData.map(
+                                    (pdf) => pdf.bytes,
+                                );
+
+                                const mergedBytes = await mergePdfs(bytesArray);
                                 if (mergedBytes) {
                                     const suffix = document
                                         .getElementById("suffix")
@@ -329,12 +505,23 @@
                             }
                         })();
                         break;
+
+                    case "error":
+                        showStatus(message.message, true);
+                        break;
+
+                    case "export-progress":
+                        console.log(
+                            `Progress: ${message.current}/${message.total} - ${message.frameName}`,
+                        );
+                        break;
                 }
             };
 
             // On Generate button click, pass the user inputs to the plugin code
             generateBtn.onclick = () => {
                 const suffix = document.getElementById("suffix").value.trim();
+                const sortOrder = document.getElementById("sortOrder").value;
                 const colorProfile =
                     document.getElementById("colorProfile").value;
                 const quality = document.getElementById("quality").value;
@@ -345,6 +532,7 @@
                         pluginMessage: {
                             type: "generate-pdf",
                             suffix,
+                            sortOrder,
                             colorProfile,
                             quality,
                             resampling,
@@ -353,6 +541,11 @@
                     "*",
                 );
             };
+
+            // Initialize: Show selection order info if option is selected
+            if (sortOrderSelect.value === "selection") {
+                showSelectionOrderInfo();
+            }
         </script>
     </body>
 </html>
